@@ -2,6 +2,7 @@ from kafka import KafkaConsumer
 import json
 from datetime import datetime as dt
 from hdfs import InsecureClient
+import time
 
 def store_data():       
     client = InsecureClient('http://localhost:9870')
@@ -13,16 +14,17 @@ def store_data():
         group_id='location-group',
         value_deserializer=lambda x: json.loads(x.decode('utf-8'))  
     )
-    #print(client.content("/data"))
     for message in consumer:
         event = message.value
-        event_day = dt.fromtimestamp(int(event['event_time']//1000)).strftime('%Y-%m-%d')
+        # Getting a correct timestamp value by dividing by 1000
+        event_timestamp = dt.fromtimestamp(int(event['event_time']//1000))
+        event_day = event_timestamp.strftime('%Y_%m_%d')
         zone = event['zone']
-        file_path = '/data/raw/traffic/'+event_day+'_'+zone+'.json'
-        if client.content(file_path,strict=False):
-            client.write(file_path, data=json.dumps(event), encoding='utf-8', append=True)
-        else: 
-            client.write(file_path, data=json.dumps(event), encoding='utf-8', append=False)
+        # Grouping JSON files by zone then by day 
+        file_path = '/data/raw/traffic/'+zone+'/'+event_day+'/'+str(time.time())+'_'+zone+'.json'
+        # Sanitizing the file path before sending to HDFS
+        file_path = "".join(c for c in file_path if c.isalpha() or c.isdigit() or c in (' ','_','.','/')).rstrip()
+        client.write(file_path, data=json.dumps(event), encoding='utf-8')
 
         
 store_data()
